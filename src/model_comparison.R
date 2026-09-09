@@ -107,4 +107,5 @@ run_model_comparison <- function(
   invisible(comparison)
 }
 
-run_model_comparison()
+if (sys.nframe() == 0L)
+  run_model_comparison()

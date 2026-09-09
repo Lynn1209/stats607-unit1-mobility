@@ -147,4 +147,5 @@ run_evaluation <- function(
   invisible(metrics)
 }
 
-run_evaluation()
+if (sys.nframe() == 0L)
+  run_evaluation()

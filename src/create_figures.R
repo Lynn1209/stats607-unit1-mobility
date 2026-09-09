@@ -136,4 +136,5 @@ run_figures <- function(
   invisible(summary_table)
 }
 
-run_figures()
+if (sys.nframe() == 0L)
+  run_figures()
