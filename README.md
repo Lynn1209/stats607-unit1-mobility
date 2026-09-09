@@ -208,3 +208,20 @@ The four models' R-squared values agree with the original report at
 four decimal places. Some reported AIC values differ by approximately
 one from the current output; the reason has not yet been established.
 Generated tables retain the computed values.
+
+## Verification performed
+
+At commit `173cb95`, a fresh local Git clone was tested on the same
+Apple Silicon Mac. The checkpoint reproduction command generated
+all seven designated outputs, and both validation tests passed
+with 40 successful assertions. The clone's working tree remained
+clean after execution.
+
+Separately, the full raw-data workflow was run successfully on the
+15,048,635-row local CSV. It regenerated 187,524 cleaned observations.
+Trip IDs and row order matched the included checkpoint exactly,
+and the six analysis variables passed a numerical comparison.
+
+This verification does not establish portability to another
+operating system or confirm that the current online CSV export
+matches the preserved local source file.
