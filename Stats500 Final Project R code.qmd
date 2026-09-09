@@ -1,0 +1,586 @@
+---
+title: "Stats500 FinalProject"
+format: html
+editor: visual
+---
+
+```{r}
+# get in data
+library(data.table)
+dt <- fread("Shared_Micromobility_Vehicle_Trips_(2018-2022).csv", nThread = 4)
+```
+
+```{r}
+# sample range in 200k
+library(dplyr)
+
+set.seed(123)
+dt_sample <- dt %>% sample_n(200000)
+```
+
+```{r}
+# select lines
+dt_sample <- dt_sample %>% 
+  select(
+    ID,
+    `Vehicle Type`,
+    `Trip Duration`,
+    `Trip Distance`,
+    `Start Time`,
+    `End Time`,
+    Month,
+    Hour,
+    `Day of Week`
+  )
+```
+
+```{r}
+# secs -> minutes
+dt_sample$`Trip Duration` <- gsub(",", "", dt_sample$`Trip Duration`)
+dt_sample$`Trip Duration` <- as.numeric(dt_sample$`Trip Duration`)
+
+dt_sample$duration_min <- dt_sample$`Trip Duration` / 60
+dt_sample <- dt_sample[
+  dt_sample$duration_min <= quantile(dt_sample$duration_min, 0.999, na.rm = TRUE)]
+```
+
+```{r}
+# m -> km
+dt_sample$`Trip Distance` <- gsub(",", "", dt_sample$`Trip Distance`)
+dt_sample$`Trip Distance` <- as.numeric(dt_sample$`Trip Distance`)
+
+dt_sample$distance_km <- dt_sample$`Trip Distance` / 1000
+dt_sample <- dt_sample[
+  dt_sample$distance_km <= quantile(dt_sample$distance_km, 0.999, na.rm = TRUE)]
+```
+
+```{r}
+# check
+summary(dt_sample$duration_min)
+summary(dt_sample$distance_km)
+```
+
+```{r}
+# vehicle type factor
+dt_sample$vehicle_type <- factor(dt_sample$`Vehicle Type`)
+```
+
+```{r}
+# factor：1–7 -> Mon–Sun
+dt_sample$weekday <- factor(
+  dt_sample$`Day of Week`,
+  levels = c(1,2,3,4,5,6,0),
+  labels = c("Mon","Tue","Wed","Thu","Fri","Sat","Sun")
+)
+```
+
+```{r}
+# month factor
+dt_sample$month <- factor(dt_sample$Month, levels = 1:12)
+```
+
+```{r}
+# Hour factor
+dt_sample$hour <- as.numeric(dt_sample$Hour)
+```
+
+```{r}
+# log(duration)
+dt_sample$log_duration <- log(dt_sample$duration_min)
+```
+
+```{r}
+# start time
+dt_sample$start_time <- as.POSIXct(
+  dt_sample$`Start Time`,
+  format = "%Y %b %d %I:%M:%S %p",
+  tz = "US/Central"
+)
+```
+
+```{r}
+# end time
+dt_sample$end_time <- as.POSIXct(
+  dt_sample$`End Time`,
+  format = "%Y %b %d %I:%M:%S %p",
+  tz = "US/Central"
+)
+```
+
+```{r}
+# clean
+trips_clean <- dt_sample %>%
+  filter(
+    !is.na(duration_min),
+    duration_min > 0,
+    !is.na(distance_km),
+    distance_km > 0,
+    !is.na(start_time),
+    !is.na(end_time),
+    !is.na(vehicle_type),
+    !is.na(hour),
+    !is.na(weekday)
+  )
+```
+
+```{r}
+dim(trips_clean)
+summary(trips_clean$duration_min)
+summary(trips_clean$log_duration)
+table(trips_clean$vehicle_type)
+```
+
+```{r}
+hist(trips_clean$duration_min, breaks = 50,
+     main = "Trip duration (min)", xlab = "Minutes")
+
+hist(trips_clean$log_duration, breaks = 50,
+     main = "Log trip duration", xlab = "log(minutes)")
+```
+
+# EDA
+
+# 1. Duration vs vehicle type
+
+```{r}
+boxplot(duration_min ~ vehicle_type, data = trips_clean,
+        main = "Trip duration by vehicle type",
+        xlab = "Vehicle type", ylab = "Duration (minutes)")
+```
+
+# 2. Log duration by vehicle type
+
+```{r}
+boxplot(log_duration ~ vehicle_type, data = trips_clean,
+        main = "Log trip duration by vehicle type",
+        xlab = "Vehicle type", ylab = "log(duration)")
+```
+
+# 3. Duration vs hour
+
+```{r}
+plot(trips_clean$hour, trips_clean$duration_min,
+     pch = 16, col = rgb(0,0,0,0.1),
+     main = "Trip duration vs hour of day",
+     xlab = "Hour", ylab = "Duration (min)")
+```
+
+# 3.A
+
+```{r}
+boxplot(duration_min ~ hour, data = trips_clean,
+        outline = FALSE,
+        main = "Distribution of trip duration by hour",
+        xlab = "Hour of day",
+        ylab = "Duration (minutes)")
+```
+
+# 3.B Trend
+
+```{r}
+med_by_hour <- aggregate(duration_min ~ hour, data = trips_clean, median)
+
+plot(med_by_hour$hour, med_by_hour$duration_min, type = "b",
+     pch = 19,
+     main = "Median trip duration by hour",
+     xlab = "Hour",
+     ylab = "Median duration (min)")
+
+```
+
+# 4. average duration in hour
+
+```{r}
+avg_by_hour <- aggregate(duration_min ~ hour, data = trips_clean, FUN = mean)
+
+plot(avg_by_hour$hour, avg_by_hour$duration_min, type = "b",
+     main = "Average trip duration by hour",
+     xlab = "Hour", ylab = "Avg duration (min)")
+```
+
+# 5.A Trip count by weekday
+
+```{r}
+counts_weekday <- table(trips_clean$weekday)
+
+plot(counts_weekday,
+     type = "b",
+     main = "Number of trips by weekday",
+     xlab = "Weekday",
+     ylab = "Trip count")
+```
+
+# 5.B Duration distribution by weekday
+
+```{r}
+boxplot(duration_min ~ weekday, data = trips_clean,
+        outline = FALSE,
+        main = "Trip duration by weekday",
+        xlab = "Weekday",
+        ylab = "Duration (minutes)")
+```
+
+# 6.A Trip count by month
+
+```{r}
+counts_month <- table(trips_clean$month)
+
+plot(as.numeric(names(counts_month)), counts_month,
+     type = "b",
+     main = "Number of trips by month",
+     xlab = "Month",
+     ylab = "Trip count")
+```
+
+# 6.B Median duration by month
+
+```{r}
+med_by_month <- aggregate(duration_min ~ month, data = trips_clean, median)
+
+plot(as.numeric(as.character(med_by_month$month)),
+     med_by_month$duration_min,
+     type = "b", pch = 19,
+     main = "Median trip duration by month",
+     xlab = "Month",
+     ylab = "Median duration (min)")
+```
+
+# 7. Duration vs distance
+
+```{r}
+plot(trips_clean$distance_km, trips_clean$duration_min,
+     pch = 16, col = rgb(0,0,0,0.1),
+     xlab = "Distance (km)", ylab = "Duration (min)",
+     main = "Trip duration vs distance")
+```
+
+# 7.A
+
+```{r}
+plot(log(trips_clean$distance_km), log(trips_clean$duration_min),
+     pch = 16, col = rgb(0,0,0,0.1),
+     xlab = "log(Distance, km)", ylab = "log(Duration, min)",
+     main = "Trip duration vs distance (log-log scale)")
+```
+
+# 7.B
+
+```{r}
+library(ggplot2)
+
+ggplot(trips_clean, aes(x = distance_km, y = duration_min)) +
+  stat_bin2d(bins = 60) +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  scale_x_log10() +
+  scale_y_log10() +
+  labs(
+    title = "2D density of distance vs duration",
+    x = "Distance (km, log scale)",
+    y = "Duration (min, log scale)"
+  ) +
+  theme_minimal()
+```
+
+# Multiple Linear Regression
+
+```{r}
+fit <- lm(log_duration ~ distance_km + hour + weekday + vehicle_type,
+          data = trips_clean)
+
+summary(fit)
+```
+
+# Stepwise / AIC
+
+```{r}
+library(MASS)
+
+fit_full <- lm(log_duration ~ distance_km + hour + weekday + vehicle_type,
+               data = trips_clean)
+
+fit_step <- stepAIC(fit_full, direction = "both")
+
+summary(fit_step)
+```
+
+# Add the distance_km\^2
+
+```{r}
+fit_quad <- lm(log_duration ~ distance_km + I(distance_km^2) + hour + weekday + vehicle_type,
+               data = trips_clean)
+summary(fit_quad)
+```
+
+# distance to log(distance)
+
+```{r}
+fit_logdist <- lm(log_duration ~ log(distance_km+0.001) + hour + weekday + vehicle_type,
+                  data = trips_clean)
+summary(fit_logdist)
+```
+
+# Add interaction
+
+```{r}
+fit_int <- lm(log_duration ~ distance_km * vehicle_type + hour + weekday,
+              data = trips_clean)
+summary(fit_int)
+```
+
+# Diagnostic Plots
+
+# Residuals vs Fitted
+
+```{r}
+library(ggplot2)
+library(broom)
+
+diag_df <- augment(fit_quad)
+
+ggplot(diag_df, aes(.fitted, .resid)) +
+  geom_point(alpha = 0.3) +
+  geom_hline(yintercept = 0, color = "red") +
+  labs(title = "Residuals vs Fitted",
+       x = "Fitted values",
+       y = "Residuals")
+```
+
+# Normal Q-Q plot
+
+```{r}
+ggplot(diag_df, aes(sample = .std.resid)) +
+  stat_qq(alpha = 0.3) +
+  stat_qq_line(color = "red") +
+  labs(title = "Normal Q-Q Plot")
+```
+
+# Scale-Location
+
+```{r}
+ggplot(diag_df, aes(.fitted, sqrt(abs(.std.resid)))) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(se = FALSE, color = "blue") +
+  labs(title = "Scale-Location Plot",
+       y = "√|Standardized residuals|")
+```
+
+# Residuals vs Leverage
+
+```{r}
+ggplot(diag_df, aes(.hat, .std.resid)) +
+  geom_point(alpha = 0.3) +
+  labs(title = "Residuals vs Leverage",
+       x = "Leverage",
+       y = "Standardized residuals")
+```
+
+# 一键4个经典图
+
+```{r}
+par(mfrow = c(2, 2))
+plot(fit_quad)
+```
+
+# VIF
+
+```{r}
+library(car)
+vif(fit_quad)
+```
+
+# Breusch–Pagan test
+
+```{r}
+library(lmtest)
+bptest(fit_quad)
+```
+
+# Residuals (histogram)
+
+```{r}
+hist(residuals(fit_quad), breaks = 50,
+     main = "Histogram of residuals",
+     xlab = "Residuals")
+```
+
+# Robust SE
+
+```{r}
+library(sandwich)
+library(lmtest)
+```
+
+```{r}
+coeftest(fit_quad, vcov = vcovHC(fit_quad, type = "HC3"))
+```
+
+# Train/Test Split
+
+# create train/test split
+
+```{r}
+set.seed(123)
+
+n <- nrow(trips_clean)
+train_idx <- sample(seq_len(n), size = 0.8 * n)
+
+train <- trips_clean[train_idx, ]
+test  <- trips_clean[-train_idx, ]
+```
+
+# 在train上拟合模型
+
+```{r}
+fit_train <- lm(log_duration ~ distance_km + I(distance_km^2) + hour + weekday + vehicle_type,
+                data = train)
+```
+
+# 对test数据预测
+
+```{r}
+pred <- predict(fit_train, newdata = test)
+```
+
+#RMSE
+
+```{r}
+rmse <- sqrt(mean((test$log_duration - pred)^2))
+rmse
+```
+
+# Test R\^2
+
+```{r}
+sst <- sum((test$log_duration - mean(test$log_duration))^2)
+sse <- sum((test$log_duration - pred)^2)
+test_r2 <- 1 - sse/sst
+test_r2
+```
+
+# 模型比较
+
+```{r}
+# collect models
+models <- list(
+  baseline   = fit_full,
+  quadratic  = fit_quad,
+  logdist    = fit_logdist,
+  interaction = fit_int
+)
+
+# function to extract metrics
+get_metrics <- function(m) {
+  s <- summary(m)
+  c(
+    AIC      = AIC(m),
+    RSE      = s$sigma,              # residual standard error
+    R2       = s$r.squared,
+    Adj_R2   = s$adj.r.squared
+  )
+}
+
+# build comparison table
+cmp <- t(sapply(models, get_metrics))
+cmp <- round(cmp, 4)
+cmp
+```
+
+# predicted vs actual
+
+```{r}
+# assuming:
+# fit_train has been fitted on train
+# pred <- predict(fit_train, newdata = test)
+
+plot(test$log_duration, pred,
+     xlab = "Observed log(duration)",
+     ylab = "Predicted log(duration)",
+     main = "Predicted vs observed log duration (test set)",
+     pch = 16, col = rgb(0, 0, 0, 0.2))
+abline(0, 1, col = "red", lwd = 2)
+```
+
+```{r}
+obs_min  <- exp(test$log_duration)
+pred_min <- exp(pred)
+
+plot(obs_min, pred_min,
+     xlab = "Observed duration (min)",
+     ylab = "Predicted duration (min)",
+     main = "Predicted vs observed duration (test set)",
+     pch = 16, col = rgb(0, 0, 0, 0.2))
+abline(0, 1, col = "red", lwd = 2)
+
+```
+
+# Partial effect for distance
+
+```{r}
+library(dplyr)
+
+# choose reference values
+ref_hour    <- mean(trips_clean$hour, na.rm = TRUE)
+ref_weekday <- levels(trips_clean$weekday)[1]       # usually "Mon"
+ref_vtype   <- levels(trips_clean$vehicle_type)[1]  # 挑一个你喜欢的 baseline
+
+# distance range
+dist_seq <- seq(
+  quantile(trips_clean$distance_km, 0.01, na.rm = TRUE),
+  quantile(trips_clean$distance_km, 0.99, na.rm = TRUE),
+  length.out = 200
+)
+
+new_dat <- data.frame(
+  distance_km = dist_seq,
+  hour        = ref_hour,
+  weekday     = factor(ref_weekday, levels = levels(trips_clean$weekday)),
+  vehicle_type = factor(ref_vtype, levels = levels(trips_clean$vehicle_type))
+)
+
+new_dat$pred_log <- predict(fit_quad, newdata = new_dat)
+new_dat$pred_min <- exp(new_dat$pred_log)
+
+plot(new_dat$distance_km, new_dat$pred_min,
+     type = "l",
+     xlab = "Distance (km)",
+     ylab = "Predicted duration (min)",
+     main = sprintf("Effect of distance on duration\n(%s, %s, hour = %.1f)",
+                    ref_weekday, ref_vtype, ref_hour))
+```
+
+# Interaction 可视化：distance × vehicle_type（用 fit_int）
+
+```{r}
+library(ggplot2)
+
+# distance range
+dist_seq <- seq(
+  quantile(trips_clean$distance_km, 0.01, na.rm = TRUE),
+  quantile(trips_clean$distance_km, 0.99, na.rm = TRUE),
+  length.out = 100
+)
+
+# fix other vars
+ref_hour    <- mean(trips_clean$hour, na.rm = TRUE)
+ref_weekday <- levels(trips_clean$weekday)[1]
+
+# build grid for each vehicle type
+grid <- expand.grid(
+  distance_km = dist_seq,
+  vehicle_type = levels(trips_clean$vehicle_type),
+  hour = ref_hour,
+  weekday = factor(ref_weekday, levels = levels(trips_clean$weekday))
+)
+
+grid$pred_log <- predict(fit_int, newdata = grid)
+grid$pred_min <- exp(grid$pred_log)
+
+ggplot(grid, aes(x = distance_km, y = pred_min, color = vehicle_type)) +
+  geom_line(size = 1) +
+  labs(
+    title = "Predicted duration vs distance by vehicle type",
+    x = "Distance (km)",
+    y = "Predicted duration (min)",
+    color = "Vehicle type"
+  )
+```
