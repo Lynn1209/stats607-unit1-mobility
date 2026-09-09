@@ -1,0 +1,25 @@
+# macOS and R session files
+.DS_Store
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# Local package libraries
+renv/library/
+renv/staging/
+
+# Quarto cache
+.quarto/
+*_cache/
+*_files/
+
+# Large raw data and regenerated outputs
+/data/raw/*
+!/data/raw/.gitkeep
+/data/processed/*
+!/data/processed/.gitkeep
+/results/figures/*
+!/results/figures/.gitkeep
+/results/tables/*
+!/results/tables/.gitkeep
